@@ -1,0 +1,67 @@
+# Build directories
+build/
+Build/
+cmake-build-*/
+out/
+
+# Compiled binaries and object files
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+
+# IDE directories
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.vcxproj.user
+
+# CMake
+CMakeCache.txt
+CMakeLists.txt.user
+CMakeUserPresets.json
+CMakeSettings.json
+
+# Visual Studio
+*.sln.user
+Debug/
+Release/
+x64/
+ipch/
+*.db
+*.opendb
+*.vcxproj.filters
+*.ilk
+*.pdb
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*.out
+*.a
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+*.swp
+*.swo
+
+# Dependencies
+vcpkg_installed/
+dependencies/
+
+# User-specific files
+.vscode/settings.json
+
+# Compressed
+*.rar
