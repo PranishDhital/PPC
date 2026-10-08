@@ -26,5 +26,7 @@ endforeach()
 
 add_executable(ppc
     main.cpp
-    lexer/lexer.cpp
+    lexer/lexer.hpp
+    parser/parser.hpp
+    generation/generation.hpp
 )
