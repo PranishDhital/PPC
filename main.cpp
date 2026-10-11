@@ -61,7 +61,8 @@ int main(int argc, char** argv) {
     }
 
     const Generator generator(*prog);
-    const std::filesystem::path outputDir = "build/bin";
+    const std::filesystem::path outputDir =
+        std::filesystem::absolute(argv[0]).parent_path();
     std::filesystem::create_directories(outputDir);
     const std::filesystem::path assemblyPath = outputDir / "out.asm";
     const std::filesystem::path objectPath = outputDir / "out.obj";

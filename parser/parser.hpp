@@ -92,8 +92,8 @@ class Parser {
 
             return NodeStat{NodeStatExit{std::move(*node_expr)}};
         } else if (token && token->type == TokenType::PD_LET &&
-                   peek(1).has_value() && peek(1)->type == TokenType::PD_IDENTIFIER &&
-                   peek(2).has_value() && peek(2)->type == TokenType::PD_EQUALS) {
+                   peek(2).has_value() && peek(2)->type == TokenType::PD_IDENTIFIER &&
+                   peek(3).has_value() && peek(3)->type == TokenType::PD_EQUALS) {
             consume();
             auto stat_let = NodeStatLet{.ident = consume()};
             consume();
