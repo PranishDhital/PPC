@@ -13,11 +13,20 @@ enum class TokenType {
     PD_IDENTIFIER,
     PD_INT_LITERAL,
     PD_FLOAT_LITERAL,
+    PD_STRING_LITERAL,
     PD_END,
     PD_OPEN_PAREN,
     PD_CLOSE_PAREN,
     PD_LET,
     PD_EQUALS,
+    PD_PLUS,
+    PD_MINUS,
+    PD_STAR,
+    PD_SLASH,
+    PD_PRINT,
+    PD_IF,
+    PD_OPEN_BRACE,
+    PD_CLOSE_BRACE,
     PD_UNDEFINED,
 };
 
@@ -27,6 +36,12 @@ struct Token {
     int row = 1;
     int column = 1;
 };
+
+inline void reportError(const std::string& filename, const Token& token,
+                        const std::string& message) {
+    std::cerr << "In " << filename << " at " << token.row << ':' << token.column
+              << ": error: " << message << '\n';
+}
 
 class lexer {
    public:
@@ -49,6 +64,27 @@ class lexer {
             case TokenType::PD_EQUALS:
                 name = "EQUALS";
                 break;
+            case TokenType::PD_PLUS:
+                name = "PLUS";
+                break;
+            case TokenType::PD_MINUS:
+                name = "MINUS";
+                break;
+            case TokenType::PD_STAR:
+                name = "STAR";
+                break;
+            case TokenType::PD_SLASH:
+                name = "SLASH";
+                break;
+            case TokenType::PD_IF:
+                name = "IF";
+                break;
+            case TokenType::PD_OPEN_BRACE:
+                name = "OPEN_BRACE";
+                break;
+            case TokenType::PD_CLOSE_BRACE:
+                name = "CLOSE_BRACE";
+                break;
             case TokenType::PD_OPEN_PAREN:
                 name = "OPEN_PAREN";
                 break;
@@ -64,15 +100,21 @@ class lexer {
             case TokenType::PD_FLOAT_LITERAL:
                 name = "FLOAT_LITERAL";
                 break;
+            case TokenType::PD_STRING_LITERAL:
+                name = "STRING_LITERAL";
+                break;
             case TokenType::PD_LET:
                 name = "LET";
+                break;
+            case TokenType::PD_PRINT:
+                name = "PRINT";
                 break;
             case TokenType::PD_UNDEFINED:
                 break;
             case TokenType::PD_END:
                 return;
         }
-        std::cout << token.row << ':' << token.column << "  " << name << "::  ' " << token.value
+        std::cout << token.row << ':' << token.column << "  " << name << " : ' " << token.value
                   << " '\n";
     }
 
@@ -123,6 +165,18 @@ class lexer {
             return {TokenType::PD_CLOSE_PAREN, ")", tokenRow, tokenColumn};
         } else if (character == '=') {
             return {TokenType::PD_EQUALS, "=", tokenRow, tokenColumn};
+        } else if (character == '+') {
+            return {TokenType::PD_PLUS, "+", tokenRow, tokenColumn};
+        } else if (character == '-') {
+            return {TokenType::PD_MINUS, "-", tokenRow, tokenColumn};
+        } else if (character == '*') {
+            return {TokenType::PD_STAR, "*", tokenRow, tokenColumn};
+        } else if (character == '/') {
+            return {TokenType::PD_SLASH, "/", tokenRow, tokenColumn};
+        } else if (character == '{') {
+            return {TokenType::PD_OPEN_BRACE, "{", tokenRow, tokenColumn};
+        } else if (character == '}') {
+            return {TokenType::PD_CLOSE_BRACE, "}", tokenRow, tokenColumn};
         }
 
         if (std::isalpha(static_cast<unsigned char>(character)) || character == '_') {
@@ -133,10 +187,12 @@ class lexer {
                 }
                 identifier += consumeAndTrackLocation();
             }
-            const TokenType type = identifier == "return" ? TokenType::PD_RETURN
-                                   : identifier == "exit" ? TokenType::PD_EXIT
-                                   : identifier == "let"  ? TokenType::PD_LET
-                                                          : TokenType::PD_IDENTIFIER;
+            const TokenType type = identifier == "return"  ? TokenType::PD_RETURN
+                                   : identifier == "exit"  ? TokenType::PD_EXIT
+                                   : identifier == "let"   ? TokenType::PD_LET
+                                   : identifier == "print" ? TokenType::PD_PRINT
+                                   : identifier == "if"    ? TokenType::PD_IF
+                                                           : TokenType::PD_IDENTIFIER;
             return {type, identifier, tokenRow, tokenColumn};
         }
 
@@ -164,6 +220,41 @@ class lexer {
             const TokenType type =
                 isFloat ? TokenType::PD_FLOAT_LITERAL : TokenType::PD_INT_LITERAL;
             return {type, number, tokenRow, tokenColumn};
+        }
+
+        if (character == '"') {
+            std::string value;
+            while (const auto next = peek()) {
+                const char current = consumeAndTrackLocation();
+                if (current == '"') {
+                    return {TokenType::PD_STRING_LITERAL, value, tokenRow, tokenColumn};
+                }
+                if (current == '\\') {
+                    const auto escaped = peek();
+                    if (!escaped) break;
+                    const char escapeChar = consumeAndTrackLocation();
+                    switch (escapeChar) {
+                        case 'n':
+                            value += '\n';
+                            break;
+                        case 't':
+                            value += '\t';
+                            break;
+                        case '"':
+                            value += '"';
+                            break;
+                        case '\\':
+                            value += '\\';
+                            break;
+                        default:
+                            return {TokenType::PD_UNDEFINED, std::string(1, escapeChar), tokenRow,
+                                    tokenColumn};
+                    }
+                } else {
+                    value += current;
+                }
+            }
+            return {TokenType::PD_UNDEFINED, "Unterminated string", tokenRow, tokenColumn};
         }
 
         return {TokenType::PD_UNDEFINED, std::string(1, character), tokenRow, tokenColumn};

@@ -1,6 +1,6 @@
 #pragma once
-#include <cstddef>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <variant>
@@ -8,112 +8,128 @@
 
 #include "../lexer/lexer.hpp"
 
-struct NodeExprIntLit {
-    Token int_lit;
+struct NodeExpr;
+struct NodeExprBinary {
+    Token op;
+    std::shared_ptr<NodeExpr> lhs;
+    std::shared_ptr<NodeExpr> rhs;
 };
-
-struct NodeExprIdent {
-    Token Ident;
-};
-
 struct NodeExpr {
-    std::variant<NodeExprIntLit, NodeExprIdent> var;
+    std::variant<Token, NodeExprBinary> var;
 };
-
 struct NodeStatExit {
     NodeExpr expr;
 };
-
+struct NodeStatPrint {
+    NodeExpr expr;
+};
+struct NodeStat;
 struct NodeStatLet {
     Token ident;
     NodeExpr expr;
 };
-struct NodeStat {
-    std::variant<NodeStatExit, NodeStatLet> var;
+struct NodeStatIf {
+    NodeExpr condition;
+    std::vector<NodeStat> body;
 };
-
+struct NodeStat {
+    std::variant<NodeStatExit, NodeStatLet, NodeStatIf, NodeStatPrint> var;
+};
 struct NodeProg {
     std::vector<NodeStat> stats;
 };
 
 class Parser {
    public:
-    /**
-     * @brief Creates a parser that takes ownership of a token sequence.
-     * @param tokens Tokens to parse, including the final PD_END token when available.
-     */
-    inline explicit Parser(std::vector<Token> tokens) : m_tokens(std::move(tokens)) {}
+    explicit Parser(std::vector<Token> tokens, std::string filename = "<input>")
+        : m_tokens(std::move(tokens)), m_filename(std::move(filename)) {}
 
-    /**
-     * @brief Parses an integer literal expression at the current token position.
-     * @return The parsed expression and advances past its token, or an empty optional
-     *         when the next token is not an integer literal.
-     */
-    [[nodiscard]] inline std::optional<NodeExpr> parse_expr() {
-        const auto token = peek();
-        if (token && token->type == TokenType::PD_INT_LITERAL) {
-            return NodeExpr{NodeExprIntLit{consume()}};
-        } else if (token && token->type == TokenType::PD_IDENTIFIER) {
-            return NodeExpr{NodeExprIdent{consume()}};
-        }
-        return {};
-    }
+    [[nodiscard]] std::optional<NodeExpr> parse_expr() { return parse_additive(); }
 
     std::optional<NodeStat> parse_stat() {
         const auto token = peek();
         if (token && token->type == TokenType::PD_EXIT) {
             consume();
-            const auto open_paren = peek();
-            if (!open_paren || open_paren->type != TokenType::PD_OPEN_PAREN) {
-                std::cerr << "Expected '(' after exit\n";
-                return {};
+            if (!consume_if(TokenType::PD_OPEN_PAREN)) {
+                return error("Expected '(' after exit");
             }
-            consume();
-
-            auto node_expr = parse_expr();
-            if (!node_expr) {
-                std::cerr << "Invalid expression\n";
-                return {};
+            auto expr = parse_expr();
+            if (!expr) {
+                return error("Invalid exit expression");
             }
-
-            const auto close_paren = peek();
-            if (!close_paren || close_paren->type != TokenType::PD_CLOSE_PAREN) {
-                std::cerr << "Expected ')' after exit expression\n";
-                return {};
+            if (!consume_if(TokenType::PD_CLOSE_PAREN)) {
+                return error("Expected ')' after exit expression");
             }
-            consume();
-
-            const auto semicolon = peek();
-            if (!semicolon || semicolon->type != TokenType::PD_SEMI) {
-                std::cerr << "Expected ';' after exit expression\n";
-                return {};
+            if (!consume_if(TokenType::PD_SEMI)) {
+                return error("Expected ';' after exit statement");
             }
+            return NodeStat{NodeStatExit{std::move(*expr)}};
+        } else if (token && token->type == TokenType::PD_LET) {
             consume();
-
-            return NodeStat{NodeStatExit{std::move(*node_expr)}};
-        } else if (token && token->type == TokenType::PD_LET &&
-                   peek(2).has_value() && peek(2)->type == TokenType::PD_IDENTIFIER &&
-                   peek(3).has_value() && peek(3)->type == TokenType::PD_EQUALS) {
-            consume();
-            auto stat_let = NodeStatLet{.ident = consume()};
-            consume();
-
-            if (auto expr = parse_expr()) {
-                stat_let.expr = std::move(*expr);
-            } else {
-                std::cerr << "Invalid Expression\n";
-                return {};
+            const auto ident = peek();
+            if (!ident || ident->type != TokenType::PD_IDENTIFIER) {
+                return error("Expected identifier after let");
             }
-            const auto semicolon = peek();
-            if (!semicolon || semicolon->type != TokenType::PD_SEMI) {
-                std::cerr << "Expected an ';' at the end of a statement\n";
-                return {};
+            Token name = consume();
+            if (!consume_if(TokenType::PD_EQUALS)) {
+                return error("Expected '=' after identifier");
             }
+            auto expr = parse_expr();
+            if (!expr) {
+                return error("Invalid let expression");
+            }
+            if (!consume_if(TokenType::PD_SEMI)) {
+                return error("Expected ';' after let statement");
+            }
+            return NodeStat{NodeStatLet{std::move(name), std::move(*expr)}};
+        } else if (token && token->type == TokenType::PD_IF) {
             consume();
-            return NodeStat{.var = stat_let};
-        } else {
-            return {};
+            if (!consume_if(TokenType::PD_OPEN_PAREN)) {
+                return error("Expected '(' after if");
+            }
+            auto condition = parse_expr();
+            if (!condition) {
+                return error("Expected condition in if statement");
+            }
+            if (!consume_if(TokenType::PD_CLOSE_PAREN)) {
+                return error("Expected ')' after if condition");
+            }
+            if (!consume_if(TokenType::PD_OPEN_BRACE)) {
+                return error("Expected '{' after if condition");
+            }
+            NodeStatIf if_stat{std::move(*condition), {}};
+            while (peek() && peek()->type != TokenType::PD_CLOSE_BRACE) {
+                if (peek()->type == TokenType::PD_END) {
+                    return error("Expected '}' before end of input");
+                }
+                auto nested = parse_stat();
+                if (!nested) {
+                    return error("Invalid statement in if block");
+                }
+                if_stat.body.push_back(std::move(*nested));
+            }
+            if (!consume_if(TokenType::PD_CLOSE_BRACE)) {
+                return error("Expected '}' to close if block");
+            }
+            return NodeStat{std::move(if_stat)};
+        } else if (token && token->type == TokenType::PD_PRINT) {
+            consume();
+            if (!consume_if(TokenType::PD_OPEN_PAREN)) {
+                return error("Expected '(' after print");
+            }
+            auto expr = parse_expr();
+            if (!expr) {
+                return error("Invalid print expression");
+            }
+            if (!consume_if(TokenType::PD_CLOSE_PAREN)) {
+                return error("Expected ')' after print expression");
+            }
+            if (!consume_if(TokenType::PD_SEMI)) {
+                return error("Expected ';' after print statement");
+            }
+            return NodeStat{NodeStatPrint{std::move(*expr)}};
         }
+        return error("Expected a statement");
     }
 
     std::optional<NodeProg> parse_prog() {
@@ -122,41 +138,102 @@ class Parser {
             if (token->type == TokenType::PD_END) {
                 consume();
                 if (peek()) {
-                    std::cerr << "Unexpected tokens after end of input\n";
-                    return {};
+                    return error_prog("Unexpected tokens after end of input");
                 }
                 return prog;
             }
-            if (auto stat = parse_stat()) {
-                prog.stats.push_back(std::move(*stat));
-            } else {
-                std::cerr << "Invalid statement\n";
+            auto stat = parse_stat();
+            if (!stat) {
                 return {};
             }
+            prog.stats.push_back(std::move(*stat));
         }
         return prog;
     }
 
    private:
-    /**
-     * @brief Looks ahead in the token sequence without consuming a token.
-     * @param offset One-based token offset from the current position.
-     * @return The token at that offset, or an empty optional if it is out of range.
-     */
-    [[nodiscard]] inline std::optional<Token> peek(std::size_t offset = 1) const {
-        if (offset == 0 || offset > m_tokens.size() - m_index) {
+    std::optional<NodeExpr> parse_additive() {
+        auto lhs = parse_multiplicative();
+        if (!lhs) {
             return {};
-        } else {
-            return m_tokens.at(m_index + offset - 1);
         }
+        while (peek() &&
+               (peek()->type == TokenType::PD_PLUS || peek()->type == TokenType::PD_MINUS)) {
+            Token op = consume();
+            auto rhs = parse_multiplicative();
+            if (!rhs) {
+                return {};
+            }
+            lhs =
+                NodeExpr{NodeExprBinary{std::move(op), std::make_shared<NodeExpr>(std::move(*lhs)),
+                                        std::make_shared<NodeExpr>(std::move(*rhs))}};
+        }
+        return lhs;
     }
-
-    /**
-     * @brief Returns and consumes the next token.
-     * @return The consumed token.
-     * @pre The current token position is within the token sequence.
-     */
-    inline Token consume() { return m_tokens.at(m_index++); }
-    const std::vector<Token> m_tokens;
+    std::optional<NodeExpr> parse_multiplicative() {
+        auto lhs = parse_primary();
+        if (!lhs) {
+            return {};
+        }
+        while (peek() &&
+               (peek()->type == TokenType::PD_STAR || peek()->type == TokenType::PD_SLASH)) {
+            Token op = consume();
+            auto rhs = parse_primary();
+            if (!rhs) {
+                return {};
+            }
+            lhs =
+                NodeExpr{NodeExprBinary{std::move(op), std::make_shared<NodeExpr>(std::move(*lhs)),
+                                        std::make_shared<NodeExpr>(std::move(*rhs))}};
+        }
+        return lhs;
+    }
+    std::optional<NodeExpr> parse_primary() {
+        const auto token = peek();
+        if (!token) {
+            return {};
+        }
+        if (token->type == TokenType::PD_INT_LITERAL ||
+            token->type == TokenType::PD_FLOAT_LITERAL ||
+            token->type == TokenType::PD_STRING_LITERAL ||
+            token->type == TokenType::PD_IDENTIFIER) {
+            return NodeExpr{consume()};
+        }
+        if (token->type == TokenType::PD_OPEN_PAREN) {
+            consume();
+            auto expr = parse_expr();
+            if (!expr || !consume_if(TokenType::PD_CLOSE_PAREN)) {
+                return {};
+            }
+            return expr;
+        }
+        return {};
+    }
+    bool consume_if(TokenType type) {
+        if (!peek() || peek()->type != type) {
+            return false;
+        }
+        consume();
+        return true;
+    }
+    std::optional<Token> peek() const {
+        return m_index < m_tokens.size() ? std::optional<Token>(m_tokens[m_index]) : std::nullopt;
+    }
+    Token consume() { return m_tokens.at(m_index++); }
+    std::optional<NodeStat> error(const char* message) const {
+        reportError(m_filename, current_token(), message);
+        return {};
+    }
+    std::optional<NodeProg> error_prog(const char* message) const {
+        reportError(m_filename, current_token(), message);
+        return {};
+    }
+    Token current_token() const {
+        if (m_index < m_tokens.size()) return m_tokens[m_index];
+        if (!m_tokens.empty()) return m_tokens.back();
+        return Token{};
+    }
+    std::vector<Token> m_tokens;
+    std::string m_filename;
     std::size_t m_index = 0;
 };
