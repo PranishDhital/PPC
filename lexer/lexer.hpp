@@ -14,6 +14,10 @@ enum class TokenType {
     PD_INT_LITERAL,
     PD_FLOAT_LITERAL,
     PD_END,
+    PD_OPEN_PAREN,
+    PD_CLOSE_PAREN,
+    PD_LET,
+    PD_EQUALS,
     PD_UNDEFINED,
 };
 
@@ -26,6 +30,10 @@ struct Token {
 
 class lexer {
    public:
+    /**
+     * @brief Prints a token's source location, type, and value.
+     * @param token Token to print. End-of-input tokens are omitted.
+     */
     inline void print(const Token& token) {
         const char* name = "UNDEFINED";
         switch (token.type) {
@@ -38,6 +46,15 @@ class lexer {
             case TokenType::PD_SEMI:
                 name = "SEMI";
                 break;
+            case TokenType::PD_EQUALS:
+                name = "EQUALS";
+                break;
+            case TokenType::PD_OPEN_PAREN:
+                name = "OPEN_PAREN";
+                break;
+            case TokenType::PD_CLOSE_PAREN:
+                name = "CLOSE_PAREN";
+                break;
             case TokenType::PD_IDENTIFIER:
                 name = "IDENTIFIER";
                 break;
@@ -46,6 +63,9 @@ class lexer {
                 break;
             case TokenType::PD_FLOAT_LITERAL:
                 name = "FLOAT_LITERAL";
+                break;
+            case TokenType::PD_LET:
+                name = "LET";
                 break;
             case TokenType::PD_UNDEFINED:
                 break;
@@ -56,6 +76,13 @@ class lexer {
                   << " '\n";
     }
 
+    /**
+     * @brief Reads and returns the next token from the input stream.
+     * @param file Source stream; its contents are loaded the first time this is called.
+     * @param row Current one-based source row, updated as characters are consumed.
+     * @param column Current one-based source column, updated as characters are consumed.
+     * @return The next token, or a PD_END token when the source is exhausted.
+     */
     inline Token getNextToken(std::istream& file, int& row, int& column) {
         if (!m_loaded) {
             m_src.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
@@ -90,6 +117,12 @@ class lexer {
 
         if (character == ';') {
             return {TokenType::PD_SEMI, ";", tokenRow, tokenColumn};
+        } else if (character == '(') {
+            return {TokenType::PD_OPEN_PAREN, "(", tokenRow, tokenColumn};
+        } else if (character == ')') {
+            return {TokenType::PD_CLOSE_PAREN, ")", tokenRow, tokenColumn};
+        } else if (character == '=') {
+            return {TokenType::PD_EQUALS, "=", tokenRow, tokenColumn};
         }
 
         if (std::isalpha(static_cast<unsigned char>(character)) || character == '_') {
@@ -102,6 +135,7 @@ class lexer {
             }
             const TokenType type = identifier == "return" ? TokenType::PD_RETURN
                                    : identifier == "exit" ? TokenType::PD_EXIT
+                                   : identifier == "let"  ? TokenType::PD_LET
                                                           : TokenType::PD_IDENTIFIER;
             return {type, identifier, tokenRow, tokenColumn};
         }
@@ -136,14 +170,24 @@ class lexer {
     }
 
    private:
-    [[nodiscard]] inline std::optional<char> peek(int ahead = 1) const {
-        if (ahead < 1 || m_index + static_cast<std::size_t>(ahead) > m_src.size()) {
+    /**
+     * @brief Looks ahead in the loaded source without consuming characters.
+     * @param offset One-based character offset from the current position.
+     * @return The character at the requested offset, or an empty optional past end-of-input.
+     */
+    [[nodiscard]] inline std::optional<char> peek(int offset = 1) const {
+        if (offset < 1 || m_index + static_cast<std::size_t>(offset) > m_src.size()) {
             return {};
         } else {
-            return m_src.at(m_index + static_cast<std::size_t>(ahead - 1));
+            return m_src.at(m_index + static_cast<std::size_t>(offset - 1));
         }
     }
 
+    /**
+     * @brief Returns and consumes the next character in the loaded source.
+     * @return The consumed character.
+     * @pre The current source position is before the end of the source.
+     */
     inline char consume() { return m_src.at(m_index++); }
     std::string m_src;
     std::size_t m_index = 0;

@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -53,39 +54,48 @@ int main(int argc, char** argv) {
     } while (token.type != TokenType::PD_END);
 
     Parser parser(std::move(tokens));
-    const auto tree = parser.parse();
-    if (!tree) {
+    std::optional<NodeProg> prog = parser.parse_prog();
+    if (!prog) {
         std::cerr << "No valid exit statement found\n";
         return 1;
     }
 
-    const Generator generator(*tree);
+    const Generator generator(*prog);
+    const std::filesystem::path outputDir = "build/bin";
+    std::filesystem::create_directories(outputDir);
+    const std::filesystem::path assemblyPath = outputDir / "out.asm";
+    const std::filesystem::path objectPath = outputDir / "out.obj";
+    const std::filesystem::path executablePath = outputDir / "out.exe";
     {
-        std::ofstream assemblyFile("out.asm");
+        std::ofstream assemblyFile(assemblyPath);
         if (!assemblyFile) {
-            std::cerr << "Error: couldn't write out.asm\n";
+            std::cerr << "Error: couldn't write " << assemblyPath.string() << '\n';
             return 1;
         }
 
-        assemblyFile << generator.generate();
+        assemblyFile << generator.gen_prog();
         if (!assemblyFile) {
-            std::cerr << "Error: failed while writing out.asm\n";
+            std::cerr << "Error: failed while writing " << assemblyPath.string() << '\n';
             return 1;
         }
     }
 
-    std::cout << "Generated out.asm\n";
+    std::cout << "Generated " << assemblyPath.string() << '\n';
 
-    if (std::system("nasm -f win64 out.asm -o out.obj") != 0) {
-        std::cerr << "Error: NASM failed to assemble out.asm\n";
+    const std::string assembleCommand =
+        "nasm -f win64 \"" + assemblyPath.string() + "\" -o \"" + objectPath.string() + "\"";
+    if (std::system(assembleCommand.c_str()) != 0) {
+        std::cerr << "Error: NASM failed to assemble " << assemblyPath.string() << '\n';
         return 1;
     }
 
-    if (std::system("gcc out.obj -o out.exe -mconsole") != 0) {
-        std::cerr << "Error: GCC failed to link out.obj\n";
+    const std::string linkCommand = "gcc \"" + objectPath.string() + "\" -o \"" +
+                                    executablePath.string() + "\" -mconsole";
+    if (std::system(linkCommand.c_str()) != 0) {
+        std::cerr << "Error: GCC failed to link " << objectPath.string() << '\n';
         return 1;
     }
 
-    std::cout << "Built out.exe\n";
+    std::cout << "Built " << executablePath.string() << '\n';
     return 0;
 }
