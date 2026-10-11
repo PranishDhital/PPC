@@ -2,6 +2,8 @@
 
 PD source files use the `.pd` extension. Statements end with a semicolon, except for an `if` block, which ends with `}`.
 
+Comments can be written as `//` through the end of a line or as `/* ... */` across lines.
+
 ## Statements
 
 ```pd

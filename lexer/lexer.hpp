@@ -25,6 +25,7 @@ enum class TokenType {
     PD_SLASH,
     PD_PRINT,
     PD_IF,
+    PD_INPUT,
     PD_OPEN_BRACE,
     PD_CLOSE_BRACE,
     PD_UNDEFINED,
@@ -109,6 +110,9 @@ class lexer {
             case TokenType::PD_PRINT:
                 name = "PRINT";
                 break;
+            case TokenType::PD_INPUT:
+                name = "INPUT";
+                break;
             case TokenType::PD_UNDEFINED:
                 break;
             case TokenType::PD_END:
@@ -142,11 +146,41 @@ class lexer {
             return character;
         };
 
-        while (const auto character = peek()) {
-            if (!std::isspace(static_cast<unsigned char>(*character))) {
+        while (true) {
+            while (const auto character = peek()) {
+                if (!std::isspace(static_cast<unsigned char>(*character))) break;
+                consumeAndTrackLocation();
+            }
+
+            const auto commentType = peek(2);
+            if (peek() != '/' || !commentType || (*commentType != '/' && *commentType != '*')) {
                 break;
             }
+            const int commentRow = row;
+            const int commentColumn = column;
             consumeAndTrackLocation();
+            consumeAndTrackLocation();
+
+            if (*commentType == '/') {
+                while (peek()) {
+                    if (consumeAndTrackLocation() == '\n') break;
+                }
+                continue;
+            }
+
+            bool closed = false;
+            while (peek()) {
+                const char current = consumeAndTrackLocation();
+                if (current == '*' && peek() == '/') {
+                    consumeAndTrackLocation();
+                    closed = true;
+                    break;
+                }
+            }
+            if (!closed) {
+                return {TokenType::PD_UNDEFINED, "Unterminated block comment", commentRow,
+                        commentColumn};
+            }
         }
 
         if (!peek()) {
@@ -192,6 +226,7 @@ class lexer {
                                    : identifier == "let"   ? TokenType::PD_LET
                                    : identifier == "print" ? TokenType::PD_PRINT
                                    : identifier == "if"    ? TokenType::PD_IF
+                                   : identifier == "input" ? TokenType::PD_INPUT
                                                            : TokenType::PD_IDENTIFIER;
             return {type, identifier, tokenRow, tokenColumn};
         }
