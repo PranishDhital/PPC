@@ -15,8 +15,17 @@ struct NodeExprBinary {
     std::shared_ptr<NodeExpr> lhs;
     std::shared_ptr<NodeExpr> rhs;
 };
+struct NodeExprUnary {
+    Token op;
+    std::shared_ptr<NodeExpr> operand;
+};
+struct NodeExprIncrement {
+    Token ident;
+    bool prefix;
+    bool decrement;
+};
 struct NodeExpr {
-    std::variant<Token, NodeExprBinary> var;
+    std::variant<Token, NodeExprBinary, NodeExprUnary, NodeExprIncrement> var;
 };
 struct NodeStatExit {
     NodeExpr expr;
@@ -25,6 +34,9 @@ struct NodeStatPrint {
     NodeExpr expr;
 };
 struct NodeStatPrintnl {
+    NodeExpr expr;
+};
+struct NodeStatExpr {
     NodeExpr expr;
 };
 struct NodeStatInput {
@@ -39,9 +51,14 @@ struct NodeStatIf {
     std::vector<NodeStat> body;
     std::vector<NodeStat> else_body;
 };
+
+struct NodeStatWhile {
+    NodeExpr condition;
+    std::vector<NodeStat> body;
+};
 struct NodeStat {
     std::variant<NodeStatExit, NodeStatLet, NodeStatIf, NodeStatPrint, NodeStatInput,
-                 NodeStatPrintnl>
+                 NodeStatPrintnl, NodeStatWhile, NodeStatExpr>
         var;
 };
 struct NodeProg {
@@ -170,8 +187,30 @@ class Parser {
                 return error("Expected ';' after printnl statement");
             }
             return NodeStat{NodeStatPrintnl{std::move(*expr)}};
+        } else if (token && token->type == TokenType::PD_WHILE) {
+            consume();
+            if (!consume_if(TokenType::PD_OPEN_PAREN)) {
+                return error("Expected '(' after while");
+            }
+            auto condition = parse_expr();
+            if (!condition) {
+                return error("Invalid while expression");
+            }
+            if (!consume_if(TokenType::PD_CLOSE_PAREN)) {
+                return error("Expected ')' after while expression");
+            }
+            if (!consume_if(TokenType::PD_OPEN_BRACE)) {
+                return error("Expected '{' after condition in while loop");
+            }
+            // The while loop block
+            NodeStatWhile while_stat{std::move(*condition), {}};
+            if (!parse_block(while_stat.body, "while")) return {};
+            return NodeStat{std::move(while_stat)};
         }
-        return error("Expected a statement");
+        auto expr = parse_expr();
+        if (!expr) return error("Expected a statement");
+        if (!consume_if(TokenType::PD_SEMI)) return error("Expected ';' after expression");
+        return NodeStat{NodeStatExpr{std::move(*expr)}};
     }
 
     std::optional<NodeProg> parse_prog() {
@@ -203,14 +242,16 @@ class Parser {
             auto nested = parse_stat();
             if (!nested) {
                 error(block_name[0] == 'i' ? "Invalid statement in if block"
-                                            : "Invalid statement in else block");
+                       : block_name[0] == 'w' ? "Invalid statement in while block"
+                                               : "Invalid statement in else block");
                 return false;
             }
             body.push_back(std::move(*nested));
         }
         if (!consume_if(TokenType::PD_CLOSE_BRACE)) {
             error(block_name[0] == 'i' ? "Expected '}' to close if block"
-                                        : "Expected '}' to close else block");
+                   : block_name[0] == 'w' ? "Expected '}' to close while block"
+                                           : "Expected '}' to close else block");
             return false;
         }
         return true;
@@ -234,14 +275,14 @@ class Parser {
         return lhs;
     }
     std::optional<NodeExpr> parse_multiplicative() {
-        auto lhs = parse_primary();
+        auto lhs = parse_unary();
         if (!lhs) {
             return {};
         }
         while (peek() &&
                (peek()->type == TokenType::PD_STAR || peek()->type == TokenType::PD_SLASH)) {
             Token op = consume();
-            auto rhs = parse_primary();
+            auto rhs = parse_unary();
             if (!rhs) {
                 return {};
             }
@@ -250,6 +291,26 @@ class Parser {
                                         std::make_shared<NodeExpr>(std::move(*rhs))}};
         }
         return lhs;
+    }
+    std::optional<NodeExpr> parse_unary() {
+        if (peek() && (peek()->type == TokenType::PD_PLUS ||
+                       peek()->type == TokenType::PD_MINUS) &&
+            peek(1) && peek(1)->type == peek()->type) {
+            const bool decrement = peek()->type == TokenType::PD_MINUS;
+            consume();
+            consume();
+            const auto ident = peek();
+            if (!ident || ident->type != TokenType::PD_IDENTIFIER) return {};
+            return NodeExpr{NodeExprIncrement{consume(), true, decrement}};
+        }
+        if (peek() && peek()->type == TokenType::PD_EXCLAIM) {
+            Token op = consume();
+            auto operand = parse_unary();
+            if (!operand) return {};
+            return NodeExpr{NodeExprUnary{std::move(op),
+                                         std::make_shared<NodeExpr>(std::move(*operand))}};
+        }
+        return parse_primary();
     }
     std::optional<NodeExpr> parse_primary() {
         const auto token = peek();
@@ -260,7 +321,16 @@ class Parser {
             token->type == TokenType::PD_FLOAT_LITERAL ||
             token->type == TokenType::PD_STRING_LITERAL ||
             token->type == TokenType::PD_IDENTIFIER) {
-            return NodeExpr{consume()};
+            Token primary = consume();
+            if (primary.type == TokenType::PD_IDENTIFIER && peek() &&
+                (peek()->type == TokenType::PD_PLUS || peek()->type == TokenType::PD_MINUS) &&
+                peek(1) && peek(1)->type == peek()->type) {
+                const bool decrement = peek()->type == TokenType::PD_MINUS;
+                consume();
+                consume();
+                return NodeExpr{NodeExprIncrement{std::move(primary), false, decrement}};
+            }
+            return NodeExpr{std::move(primary)};
         }
         if (token->type == TokenType::PD_OPEN_PAREN) {
             consume();
@@ -281,7 +351,8 @@ class Parser {
                           peek()->type == TokenType::PD_SMALLER_THAN ||
                           peek()->type == TokenType::PD_GREATER_EQUAL ||
                           peek()->type == TokenType::PD_SMALLER_EQUAL ||
-                          peek()->type == TokenType::PD_DOUBLE_EQ)) {
+                          peek()->type == TokenType::PD_DOUBLE_EQ ||
+                          peek()->type == TokenType::PD_NOT_EQ)) {
             Token op = consume();
             auto rhs = parse_additive();
             if (!rhs) {
@@ -300,8 +371,10 @@ class Parser {
         consume();
         return true;
     }
-    std::optional<Token> peek() const {
-        return m_index < m_tokens.size() ? std::optional<Token>(m_tokens[m_index]) : std::nullopt;
+    std::optional<Token> peek(std::size_t offset = 0) const {
+        return m_index + offset < m_tokens.size()
+                   ? std::optional<Token>(m_tokens[m_index + offset])
+                   : std::nullopt;
     }
     Token consume() { return m_tokens.at(m_index++); }
     std::optional<NodeStat> error(const char* message) const {

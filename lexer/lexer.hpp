@@ -36,6 +36,8 @@ enum class TokenType {
     PD_GREATER_EQUAL,
     PD_DOUBLE_EQ,
     PD_EXCLAIM,
+    PD_NOT_EQ,
+    PD_WHILE,
     PD_UNDEFINED,
 };
 
@@ -144,6 +146,12 @@ class lexer {
                 break;
             case TokenType::PD_DOUBLE_EQ:
                 name = "DOUBLE_EQ";
+                break;
+            case TokenType::PD_NOT_EQ:
+                name = "NOT_EQ";
+                break;
+            case TokenType::PD_WHILE:
+                name = "WHILE";
                 break;
             case TokenType::PD_UNDEFINED:
                 break;
@@ -260,6 +268,10 @@ class lexer {
             }
             return {TokenType::PD_EQUALS, "=", tokenRow, tokenColumn};
         } else if (character == '!') {
+            if (peek() == '=') {
+                consumeAndTrackLocation();
+                return {TokenType::PD_NOT_EQ, "!=", tokenRow, tokenColumn};
+            }
             return {TokenType::PD_EXCLAIM, "!", tokenRow, tokenColumn};
         }
 
@@ -279,6 +291,7 @@ class lexer {
                                    : identifier == "input"   ? TokenType::PD_INPUT
                                    : identifier == "printnl" ? TokenType::PD_PRINT_NL
                                    : identifier == "else"    ? TokenType::PD_ELSE
+                                   : identifier == "while"   ? TokenType::PD_WHILE
                                                              : TokenType::PD_IDENTIFIER;
             return {type, identifier, tokenRow, tokenColumn};
         }

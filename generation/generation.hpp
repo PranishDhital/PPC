@@ -61,6 +61,32 @@ class Generator {
             }
             return;
         }
+        if (const auto* unary = std::get_if<NodeExprUnary>(&expr.var)) {
+            if (unary->op.type != TokenType::PD_EXCLAIM) {
+                reportError(m_filename, unary->op, "Unsupported unary operator");
+                std::exit(EXIT_FAILURE);
+            }
+            gen_expr(*unary->operand);
+            m_output << "    xorpd xmm1, xmm1\n    ucomisd xmm0, xmm1\n"
+                        "    sete al\n    movzx eax, al\n    cvtsi2sd xmm0, eax\n";
+            return;
+        }
+        if (const auto* increment = std::get_if<NodeExprIncrement>(&expr.var)) {
+            const auto it = m_vars.find(increment->ident.value);
+            if (it == m_vars.end()) {
+                reportError(m_filename, increment->ident,
+                            "Undefined identifier: " + increment->ident.value);
+                std::exit(EXIT_FAILURE);
+            }
+            m_output << "    movsd xmm0, [rbp - " << it->second << "]\n";
+            if (!increment->prefix) m_output << "    movapd xmm1, xmm0\n";
+            m_output << "    mov rax, 4607182418800017408\n    movq xmm2, rax\n    "
+                     << (increment->decrement ? "subsd" : "addsd")
+                     << " xmm0, xmm2\n    movsd [rbp - "
+                     << it->second << "], xmm0\n";
+            if (!increment->prefix) m_output << "    movapd xmm0, xmm1\n";
+            return;
+        }
         const auto& binary = std::get<NodeExprBinary>(expr.var);
         gen_expr(*binary.lhs);
         m_output << "    sub rsp, 8\n    movsd [rsp], xmm0\n";
@@ -72,6 +98,7 @@ class Generator {
             case TokenType::PD_GREATER_THAN:
             case TokenType::PD_GREATER_EQUAL:
             case TokenType::PD_DOUBLE_EQ:
+            case TokenType::PD_NOT_EQ:
                 m_output << "    ucomisd xmm0, xmm1\n";
                 switch (binary.op.type) {
                     case TokenType::PD_SMALLER_THAN: m_output << "    setb al\n"; break;
@@ -82,6 +109,9 @@ class Generator {
                         break;
                     case TokenType::PD_DOUBLE_EQ:
                         m_output << "    sete al\n    setnp dl\n    and al, dl\n";
+                        break;
+                    case TokenType::PD_NOT_EQ:
+                        m_output << "    setne al\n    setp dl\n    or al, dl\n";
                         break;
                     default: break;
                 }
@@ -191,19 +221,29 @@ class Generator {
             m_output << "    lea rdx, [rel newline]\n"
                         "    lea rcx, [rel format_string]\n    sub rsp, "
                      << call_space << "\n    call printf\n    add rsp, " << call_space << '\n';
-        } else {
-            const auto& if_stat = std::get<NodeStatIf>(stat.var);
+        } else if (const auto* expr = std::get_if<NodeStatExpr>(&stat.var)) {
+            gen_expr(expr->expr);
+        } else if (const auto* if_stat = std::get_if<NodeStatIf>(&stat.var)) {
             const std::size_t label = m_next_label++;
-            gen_expr(if_stat.condition);
+            gen_expr(if_stat->condition);
             m_output << "    xorpd xmm1, xmm1\n    ucomisd xmm0, xmm1\n    je .if_end_" << label
                      << '\n';
-            for (const auto& nested : if_stat.body) gen_stat(nested);
-            if (!if_stat.else_body.empty()) {
+            for (const auto& nested : if_stat->body) gen_stat(nested);
+            if (!if_stat->else_body.empty()) {
                 m_output << "    jmp .if_done_" << label << '\n';
             }
             m_output << ".if_end_" << label << ":\n";
-            for (const auto& nested : if_stat.else_body) gen_stat(nested);
-            if (!if_stat.else_body.empty()) m_output << ".if_done_" << label << ":\n";
+            for (const auto& nested : if_stat->else_body) gen_stat(nested);
+            if (!if_stat->else_body.empty()) m_output << ".if_done_" << label << ":\n";
+        } else {
+            const auto& while_stat = std::get<NodeStatWhile>(stat.var);
+            const std::size_t label = m_next_label++;
+            m_output << ".while_start_" << label << ":\n";
+            gen_expr(while_stat.condition);
+            m_output << "    xorpd xmm1, xmm1\n    ucomisd xmm0, xmm1\n    je .while_end_"
+                     << label << '\n';
+            for (const auto& nested : while_stat.body) gen_stat(nested);
+            m_output << "    jmp .while_start_" << label << "\n.while_end_" << label << ":\n";
         }
     }
     std::optional<std::string> eval_string(const NodeExpr& expr) const {
@@ -211,6 +251,8 @@ class Generator {
             if (token->type == TokenType::PD_STRING_LITERAL) return token->value;
             return {};
         }
+        if (std::holds_alternative<NodeExprUnary>(expr.var) ||
+            std::holds_alternative<NodeExprIncrement>(expr.var)) return {};
         const auto& binary = std::get<NodeExprBinary>(expr.var);
         if (binary.op.type != TokenType::PD_PLUS) return {};
         auto lhs = eval_string(*binary.lhs);
@@ -222,6 +264,10 @@ class Generator {
         if (const auto* token = std::get_if<Token>(&expr.var)) {
             return token->type == TokenType::PD_STRING_LITERAL;
         }
+        if (const auto* unary = std::get_if<NodeExprUnary>(&expr.var)) {
+            return contains_string(*unary->operand);
+        }
+        if (std::holds_alternative<NodeExprIncrement>(expr.var)) return false;
         const auto& binary = std::get<NodeExprBinary>(expr.var);
         return binary.op.type == TokenType::PD_PLUS &&
                (contains_string(*binary.lhs) || contains_string(*binary.rhs));
