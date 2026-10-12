@@ -14,3 +14,14 @@ let age = 0;
 input (age);
 print("\n");
 printnl(age);
+if (age < 18)
+{
+    printnl("You are young");
+} else if (age >= 18)
+{
+    printnl("You are an adult");
+}
+else
+{
+    print("Error");
+}

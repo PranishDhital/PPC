@@ -67,6 +67,29 @@ class Generator {
         gen_expr(*binary.rhs);
         m_output << "    movapd xmm1, xmm0\n    movsd xmm0, [rsp]\n    add rsp, 8\n";
         switch (binary.op.type) {
+            case TokenType::PD_SMALLER_THAN:
+            case TokenType::PD_SMALLER_EQUAL:
+            case TokenType::PD_GREATER_THAN:
+            case TokenType::PD_GREATER_EQUAL:
+            case TokenType::PD_DOUBLE_EQ:
+                m_output << "    ucomisd xmm0, xmm1\n";
+                switch (binary.op.type) {
+                    case TokenType::PD_SMALLER_THAN: m_output << "    setb al\n"; break;
+                    case TokenType::PD_GREATER_THAN: m_output << "    seta al\n"; break;
+                    case TokenType::PD_GREATER_EQUAL: m_output << "    setae al\n"; break;
+                    case TokenType::PD_SMALLER_EQUAL:
+                        m_output << "    setbe al\n    setnp dl\n    and al, dl\n";
+                        break;
+                    case TokenType::PD_DOUBLE_EQ:
+                        m_output << "    sete al\n    setnp dl\n    and al, dl\n";
+                        break;
+                    default: break;
+                }
+                m_output << "    movzx eax, al\n    cvtsi2sd xmm0, eax\n";
+                return;
+            default: break;
+        }
+        switch (binary.op.type) {
             case TokenType::PD_PLUS:
                 m_output << "    addsd xmm0, xmm1\n";
                 break;

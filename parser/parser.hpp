@@ -53,7 +53,7 @@ class Parser {
     explicit Parser(std::vector<Token> tokens, std::string filename = "<input>")
         : m_tokens(std::move(tokens)), m_filename(std::move(filename)) {}
 
-    [[nodiscard]] std::optional<NodeExpr> parse_expr() { return parse_additive(); }
+    [[nodiscard]] std::optional<NodeExpr> parse_expr() { return parse_comparison(); }
 
     std::optional<NodeStat> parse_stat() {
         const auto token = peek();
@@ -271,6 +271,27 @@ class Parser {
             return expr;
         }
         return {};
+    }
+    std::optional<NodeExpr> parse_comparison() {
+        auto lhs = parse_additive();
+        if (!lhs) {
+            return {};
+        }
+        while (peek() && (peek()->type == TokenType::PD_GREATER_THAN ||
+                          peek()->type == TokenType::PD_SMALLER_THAN ||
+                          peek()->type == TokenType::PD_GREATER_EQUAL ||
+                          peek()->type == TokenType::PD_SMALLER_EQUAL ||
+                          peek()->type == TokenType::PD_DOUBLE_EQ)) {
+            Token op = consume();
+            auto rhs = parse_additive();
+            if (!rhs) {
+                return {};
+            }
+            lhs =
+                NodeExpr{NodeExprBinary{std::move(op), std::make_shared<NodeExpr>(std::move(*lhs)),
+                                        std::make_shared<NodeExpr>(std::move(*rhs))}};
+        }
+        return lhs;
     }
     bool consume_if(TokenType type) {
         if (!peek() || peek()->type != type) {

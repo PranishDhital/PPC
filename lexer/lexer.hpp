@@ -32,8 +32,9 @@ enum class TokenType {
     PD_CLOSE_BRACE,
     PD_SMALLER_THAN,
     PD_GREATER_THAN,
-    PD_SMALLER_THAN_AND_EQ,
-    PD_GREATER_THAN_AND_EQ,
+    PD_SMALLER_EQUAL,
+    PD_GREATER_EQUAL,
+    PD_DOUBLE_EQ,
     PD_EXCLAIM,
     PD_UNDEFINED,
 };
@@ -132,14 +133,17 @@ class lexer {
             case TokenType::PD_GREATER_THAN:
                 name = "GREATER_THAN";
                 break;
-            case TokenType::PD_SMALLER_THAN_AND_EQ:
+            case TokenType::PD_SMALLER_EQUAL:
                 name = "SMALLER_THAN_EQ";
                 break;
-            case TokenType::PD_GREATER_THAN_AND_EQ:
+            case TokenType::PD_GREATER_EQUAL:
                 name = "GREATER_THAN_EQ";
                 break;
             case TokenType::PD_EXCLAIM:
                 name = "EXCLAMATION";
+                break;
+            case TokenType::PD_DOUBLE_EQ:
+                name = "DOUBLE_EQ";
                 break;
             case TokenType::PD_UNDEFINED:
                 break;
@@ -240,16 +244,20 @@ class lexer {
         } else if (character == '<') {
             if (peek() == '=') {
                 consumeAndTrackLocation();
-                return {TokenType::PD_SMALLER_THAN_AND_EQ, "<=", tokenRow, tokenColumn};
+                return {TokenType::PD_SMALLER_EQUAL, "<=", tokenRow, tokenColumn};
             }
             return {TokenType::PD_SMALLER_THAN, "<", tokenRow, tokenColumn};
         } else if (character == '>') {
             if (peek() == '=') {
                 consumeAndTrackLocation();
-                return {TokenType::PD_GREATER_THAN_AND_EQ, ">=", tokenRow, tokenColumn};
+                return {TokenType::PD_GREATER_EQUAL, ">=", tokenRow, tokenColumn};
             }
             return {TokenType::PD_GREATER_THAN, ">", tokenRow, tokenColumn};
         } else if (character == '=') {
+            if (peek() == '=') {
+                consumeAndTrackLocation();
+                return {TokenType::PD_DOUBLE_EQ, "==", tokenRow, tokenColumn};
+            }
             return {TokenType::PD_EQUALS, "=", tokenRow, tokenColumn};
         } else if (character == '!') {
             return {TokenType::PD_EXCLAIM, "!", tokenRow, tokenColumn};
