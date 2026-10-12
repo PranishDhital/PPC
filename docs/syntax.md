@@ -9,17 +9,25 @@ Comments can be written as `//` through the end of a line or as `/* ... */` acro
 ```pd
 let name = expression;
 print(expression);
+printnl(expression);
+input(identifier);
 exit(expression);
 
 if (condition) {
+    statement;
+} else if (other_condition) {
+    statement;
+} else {
     statement;
 }
 ```
 
 - `let` declares a variable. Identifiers start with a letter or `_` and may contain letters, digits, and `_`. A name can only be declared once.
-- `print` prints a numeric expression or a string. Strings can be joined with `+` and combined with numeric expressions or variables, for example `print("value: " + x);`.
+- `print` prints a numeric expression or a string without adding a newline. Strings can be joined with `+` and combined with numeric expressions or variables, for example `print("value: " + x);`.
+- `printnl` prints a numeric expression or string, then adds a newline.
+- `input` reads a number into an already declared variable, for example `input(age);`.
 - `exit` ends the program and uses the integer conversion of its numeric expression as the exit code.
-- `if` runs its body when its numeric condition is nonzero. Comparisons and `else` are not currently supported.
+- `if` runs its body when its numeric condition is nonzero. `else if` checks another condition when earlier conditions are zero, and `else` runs when none of the preceding conditions are nonzero. Conditions are numeric expressions; comparisons are not currently supported.
 - Statements can be nested inside `if` blocks.
 
 ## Expressions

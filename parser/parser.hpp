@@ -9,6 +9,7 @@
 #include "../lexer/lexer.hpp"
 
 struct NodeExpr;
+struct NodeStat;
 struct NodeExprBinary {
     Token op;
     std::shared_ptr<NodeExpr> lhs;
@@ -23,7 +24,12 @@ struct NodeStatExit {
 struct NodeStatPrint {
     NodeExpr expr;
 };
-struct NodeStat;
+struct NodeStatPrintnl {
+    NodeExpr expr;
+};
+struct NodeStatInput {
+    Token ident;
+};
 struct NodeStatLet {
     Token ident;
     NodeExpr expr;
@@ -31,9 +37,12 @@ struct NodeStatLet {
 struct NodeStatIf {
     NodeExpr condition;
     std::vector<NodeStat> body;
+    std::vector<NodeStat> else_body;
 };
 struct NodeStat {
-    std::variant<NodeStatExit, NodeStatLet, NodeStatIf, NodeStatPrint> var;
+    std::variant<NodeStatExit, NodeStatLet, NodeStatIf, NodeStatPrint, NodeStatInput,
+                 NodeStatPrintnl>
+        var;
 };
 struct NodeProg {
     std::vector<NodeStat> stats;
@@ -97,19 +106,19 @@ class Parser {
             if (!consume_if(TokenType::PD_OPEN_BRACE)) {
                 return error("Expected '{' after if condition");
             }
-            NodeStatIf if_stat{std::move(*condition), {}};
-            while (peek() && peek()->type != TokenType::PD_CLOSE_BRACE) {
-                if (peek()->type == TokenType::PD_END) {
-                    return error("Expected '}' before end of input");
+            NodeStatIf if_stat{std::move(*condition), {}, {}};
+            if (!parse_block(if_stat.body, "if")) return {};
+            if (consume_if(TokenType::PD_ELSE)) {
+                if (peek() && peek()->type == TokenType::PD_IF) {
+                    auto else_if = parse_stat();
+                    if (!else_if) return {};
+                    if_stat.else_body.push_back(std::move(*else_if));
+                } else {
+                    if (!consume_if(TokenType::PD_OPEN_BRACE)) {
+                        return error("Expected 'if' or '{' after else");
+                    }
+                    if (!parse_block(if_stat.else_body, "else")) return {};
                 }
-                auto nested = parse_stat();
-                if (!nested) {
-                    return error("Invalid statement in if block");
-                }
-                if_stat.body.push_back(std::move(*nested));
-            }
-            if (!consume_if(TokenType::PD_CLOSE_BRACE)) {
-                return error("Expected '}' to close if block");
             }
             return NodeStat{std::move(if_stat)};
         } else if (token && token->type == TokenType::PD_PRINT) {
@@ -128,6 +137,39 @@ class Parser {
                 return error("Expected ';' after print statement");
             }
             return NodeStat{NodeStatPrint{std::move(*expr)}};
+        } else if (token && token->type == TokenType::PD_INPUT) {
+            consume();
+            if (!consume_if(TokenType::PD_OPEN_PAREN)) {
+                return error("Expected '(' after input");
+            }
+            const auto ident = peek();
+            if (!ident || ident->type != TokenType::PD_IDENTIFIER) {
+                return error("Expected identifier in input statement");
+            }
+            Token name = consume();
+            if (!consume_if(TokenType::PD_CLOSE_PAREN)) {
+                return error("Expected ')' after input identifier");
+            }
+            if (!consume_if(TokenType::PD_SEMI)) {
+                return error("Expected ';' after input statement");
+            }
+            return NodeStat{NodeStatInput{std::move(name)}};
+        } else if (token && token->type == TokenType::PD_PRINT_NL) {
+            consume();
+            if (!consume_if(TokenType::PD_OPEN_PAREN)) {
+                return error("Expected '(' after printnl");
+            }
+            auto expr = parse_expr();
+            if (!expr) {
+                return error("Invalid printnl expression");
+            }
+            if (!consume_if(TokenType::PD_CLOSE_PAREN)) {
+                return error("Expected ')' after printnl expression");
+            }
+            if (!consume_if(TokenType::PD_SEMI)) {
+                return error("Expected ';' after printnl statement");
+            }
+            return NodeStat{NodeStatPrintnl{std::move(*expr)}};
         }
         return error("Expected a statement");
     }
@@ -152,6 +194,27 @@ class Parser {
     }
 
    private:
+    bool parse_block(std::vector<NodeStat>& body, const char* block_name) {
+        while (peek() && peek()->type != TokenType::PD_CLOSE_BRACE) {
+            if (peek()->type == TokenType::PD_END) {
+                error("Expected '}' before end of input");
+                return false;
+            }
+            auto nested = parse_stat();
+            if (!nested) {
+                error(block_name[0] == 'i' ? "Invalid statement in if block"
+                                            : "Invalid statement in else block");
+                return false;
+            }
+            body.push_back(std::move(*nested));
+        }
+        if (!consume_if(TokenType::PD_CLOSE_BRACE)) {
+            error(block_name[0] == 'i' ? "Expected '}' to close if block"
+                                        : "Expected '}' to close else block");
+            return false;
+        }
+        return true;
+    }
     std::optional<NodeExpr> parse_additive() {
         auto lhs = parse_multiplicative();
         if (!lhs) {

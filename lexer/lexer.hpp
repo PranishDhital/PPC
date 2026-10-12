@@ -24,10 +24,17 @@ enum class TokenType {
     PD_STAR,
     PD_SLASH,
     PD_PRINT,
+    PD_PRINT_NL,
     PD_IF,
+    PD_ELSE,
     PD_INPUT,
     PD_OPEN_BRACE,
     PD_CLOSE_BRACE,
+    PD_SMALLER_THAN,
+    PD_GREATER_THAN,
+    PD_SMALLER_THAN_AND_EQ,
+    PD_GREATER_THAN_AND_EQ,
+    PD_EXCLAIM,
     PD_UNDEFINED,
 };
 
@@ -113,6 +120,27 @@ class lexer {
             case TokenType::PD_INPUT:
                 name = "INPUT";
                 break;
+            case TokenType::PD_PRINT_NL:
+                name = "PRINTNL";
+                break;
+            case TokenType::PD_ELSE:
+                name = "ELSE";
+                break;
+            case TokenType::PD_SMALLER_THAN:
+                name = "SMALLER_THAN";
+                break;
+            case TokenType::PD_GREATER_THAN:
+                name = "GREATER_THAN";
+                break;
+            case TokenType::PD_SMALLER_THAN_AND_EQ:
+                name = "SMALLER_THAN_EQ";
+                break;
+            case TokenType::PD_GREATER_THAN_AND_EQ:
+                name = "GREATER_THAN_EQ";
+                break;
+            case TokenType::PD_EXCLAIM:
+                name = "EXCLAMATION";
+                break;
             case TokenType::PD_UNDEFINED:
                 break;
             case TokenType::PD_END:
@@ -197,8 +225,6 @@ class lexer {
             return {TokenType::PD_OPEN_PAREN, "(", tokenRow, tokenColumn};
         } else if (character == ')') {
             return {TokenType::PD_CLOSE_PAREN, ")", tokenRow, tokenColumn};
-        } else if (character == '=') {
-            return {TokenType::PD_EQUALS, "=", tokenRow, tokenColumn};
         } else if (character == '+') {
             return {TokenType::PD_PLUS, "+", tokenRow, tokenColumn};
         } else if (character == '-') {
@@ -211,6 +237,22 @@ class lexer {
             return {TokenType::PD_OPEN_BRACE, "{", tokenRow, tokenColumn};
         } else if (character == '}') {
             return {TokenType::PD_CLOSE_BRACE, "}", tokenRow, tokenColumn};
+        } else if (character == '<') {
+            if (peek() == '=') {
+                consumeAndTrackLocation();
+                return {TokenType::PD_SMALLER_THAN_AND_EQ, "<=", tokenRow, tokenColumn};
+            }
+            return {TokenType::PD_SMALLER_THAN, "<", tokenRow, tokenColumn};
+        } else if (character == '>') {
+            if (peek() == '=') {
+                consumeAndTrackLocation();
+                return {TokenType::PD_GREATER_THAN_AND_EQ, ">=", tokenRow, tokenColumn};
+            }
+            return {TokenType::PD_GREATER_THAN, ">", tokenRow, tokenColumn};
+        } else if (character == '=') {
+            return {TokenType::PD_EQUALS, "=", tokenRow, tokenColumn};
+        } else if (character == '!') {
+            return {TokenType::PD_EXCLAIM, "!", tokenRow, tokenColumn};
         }
 
         if (std::isalpha(static_cast<unsigned char>(character)) || character == '_') {
@@ -221,13 +263,15 @@ class lexer {
                 }
                 identifier += consumeAndTrackLocation();
             }
-            const TokenType type = identifier == "return"  ? TokenType::PD_RETURN
-                                   : identifier == "exit"  ? TokenType::PD_EXIT
-                                   : identifier == "let"   ? TokenType::PD_LET
-                                   : identifier == "print" ? TokenType::PD_PRINT
-                                   : identifier == "if"    ? TokenType::PD_IF
-                                   : identifier == "input" ? TokenType::PD_INPUT
-                                                           : TokenType::PD_IDENTIFIER;
+            const TokenType type = identifier == "return"    ? TokenType::PD_RETURN
+                                   : identifier == "exit"    ? TokenType::PD_EXIT
+                                   : identifier == "let"     ? TokenType::PD_LET
+                                   : identifier == "print"   ? TokenType::PD_PRINT
+                                   : identifier == "if"      ? TokenType::PD_IF
+                                   : identifier == "input"   ? TokenType::PD_INPUT
+                                   : identifier == "printnl" ? TokenType::PD_PRINT_NL
+                                   : identifier == "else"    ? TokenType::PD_ELSE
+                                                             : TokenType::PD_IDENTIFIER;
             return {type, identifier, tokenRow, tokenColumn};
         }
 

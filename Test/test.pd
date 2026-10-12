@@ -3,10 +3,14 @@
     Multi line comment
 */
 
-
 let x = 1.5;
 let y = x + 2.25;
-print (1+1);
-print ("Hello" + "world");
-print ("value of x is : " + x);
-print (y);
+printnl (1+1);
+printnl ("Hello" + "world");
+printnl ("value of x is : " + x);
+printnl (y);
+print("Enter ur age: ");
+let age = 0;
+input (age);
+print("\n");
+printnl(age);

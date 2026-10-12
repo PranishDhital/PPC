@@ -1,8 +1,8 @@
 #pragma once
-#include <cstdlib>
 #include <bit>
-#include <iostream>
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -13,7 +13,7 @@
 #include "../parser/parser.hpp"
 
 class Generator {
-public:
+   public:
     explicit Generator(NodeProg prog, std::string filename = "<input>")
         : m_prog(std::move(prog)), m_filename(std::move(filename)) {}
 
@@ -22,8 +22,9 @@ public:
         for (const auto& stat : m_prog.stats) gen_stat(stat);
         m_output << "    xor eax, eax\n    mov rsp, rbp\n    pop rbp\n    ret\n";
         std::stringstream assembly;
-        assembly << "default rel\nextern printf\nglobal main\nsection .data\n"
-                    "format_double: db '%g', 10, 0\nformat_string: db '%s', 10, 0\n"
+        assembly << "default rel\nextern printf\nextern scanf\nglobal main\nsection .data\n"
+                    "format_double: db '%g', 0\nformat_string: db '%s', 0\n"
+                    "format_input_double: db '%lf', 0\n"
                     "format_double_inline: db '%g', 0\nformat_string_inline: db '%s', 0\n"
                     "newline: db 10, 0\n";
         for (const auto& [label, value] : m_string_constants) {
@@ -39,13 +40,14 @@ public:
         return assembly.str();
     }
 
-private:
+   private:
     void gen_expr(const NodeExpr& expr) const {
         if (const auto* token = std::get_if<Token>(&expr.var)) {
             if (token->type == TokenType::PD_STRING_LITERAL) {
                 reportError(m_filename, *token, "String values are only supported by print");
                 std::exit(EXIT_FAILURE);
-            } else if (token->type == TokenType::PD_INT_LITERAL || token->type == TokenType::PD_FLOAT_LITERAL) {
+            } else if (token->type == TokenType::PD_INT_LITERAL ||
+                       token->type == TokenType::PD_FLOAT_LITERAL) {
                 const double value = std::stod(token->value);
                 const auto bits = std::bit_cast<std::uint64_t>(value);
                 m_output << "    mov rax, " << bits << "\n    movq xmm0, rax\n";
@@ -65,10 +67,18 @@ private:
         gen_expr(*binary.rhs);
         m_output << "    movapd xmm1, xmm0\n    movsd xmm0, [rsp]\n    add rsp, 8\n";
         switch (binary.op.type) {
-            case TokenType::PD_PLUS: m_output << "    addsd xmm0, xmm1\n"; break;
-            case TokenType::PD_MINUS: m_output << "    subsd xmm0, xmm1\n"; break;
-            case TokenType::PD_STAR: m_output << "    mulsd xmm0, xmm1\n"; break;
-            case TokenType::PD_SLASH: m_output << "    divsd xmm0, xmm1\n"; break;
+            case TokenType::PD_PLUS:
+                m_output << "    addsd xmm0, xmm1\n";
+                break;
+            case TokenType::PD_MINUS:
+                m_output << "    subsd xmm0, xmm1\n";
+                break;
+            case TokenType::PD_STAR:
+                m_output << "    mulsd xmm0, xmm1\n";
+                break;
+            case TokenType::PD_SLASH:
+                m_output << "    divsd xmm0, xmm1\n";
+                break;
             default:
                 reportError(m_filename, binary.op, "Unsupported arithmetic operator");
                 std::exit(EXIT_FAILURE);
@@ -87,6 +97,18 @@ private:
             m_stack_slots++;
             m_output << "    sub rsp, 8\n    movsd [rbp - " << m_stack_slots * 8 << "], xmm0\n";
             m_vars.emplace(let->ident.value, m_stack_slots * 8);
+        } else if (const auto* input = std::get_if<NodeStatInput>(&stat.var)) {
+            const auto it = m_vars.find(input->ident.value);
+            if (it == m_vars.end()) {
+                reportError(m_filename, input->ident,
+                            "Undefined identifier: " + input->ident.value);
+                std::exit(EXIT_FAILURE);
+            }
+            const std::size_t call_space = (m_stack_slots % 2 == 0) ? 32 : 40;
+            m_output << "    lea rdx, [rbp - " << it->second
+                     << "]\n"
+                        "    lea rcx, [rel format_input_double]\n    sub rsp, "
+                     << call_space << "\n    call scanf\n    add rsp, " << call_space << '\n';
         } else if (const auto* print = std::get_if<NodeStatPrint>(&stat.var)) {
             const std::size_t call_space = (m_stack_slots % 2 == 0) ? 32 : 40;
             if (contains_string(print->expr)) {
@@ -96,32 +118,69 @@ private:
                     if (const auto* token = std::get_if<Token>(&part->var);
                         token && token->type == TokenType::PD_STRING_LITERAL) {
                         const std::string label = string_label(token->value);
-                        m_output << "    lea rdx, [rel " << label << "]\n"
-                                    "    lea rcx, [rel format_string_inline]\n    sub rsp, " << call_space
-                                 << "\n    call printf\n    add rsp, " << call_space << '\n';
+                        m_output << "    lea rdx, [rel " << label
+                                 << "]\n"
+                                    "    lea rcx, [rel format_string_inline]\n    sub rsp, "
+                                 << call_space << "\n    call printf\n    add rsp, " << call_space
+                                 << '\n';
                     } else {
                         gen_expr(*part);
                         m_output << "    movq rdx, xmm0\n"
-                                    "    lea rcx, [rel format_double_inline]\n    sub rsp, " << call_space
-                                 << "\n    call printf\n    add rsp, " << call_space << '\n';
+                                    "    lea rcx, [rel format_double_inline]\n    sub rsp, "
+                                 << call_space << "\n    call printf\n    add rsp, " << call_space
+                                 << '\n';
                     }
                 }
-                m_output << "    lea rdx, [rel newline]\n"
-                            "    lea rcx, [rel format_string_inline]\n    sub rsp, " << call_space
-                         << "\n    call printf\n    add rsp, " << call_space << '\n';
             } else {
                 gen_expr(print->expr);
                 m_output << "    movapd xmm1, xmm0\n    movq rdx, xmm0\n"
-                            "    lea rcx, [rel format_double]\n    sub rsp, " << call_space
-                         << "\n    call printf\n    add rsp, " << call_space << '\n';
+                            "    lea rcx, [rel format_double]\n    sub rsp, "
+                         << call_space << "\n    call printf\n    add rsp, " << call_space << '\n';
             }
+        } else if (const auto* printnl = std::get_if<NodeStatPrintnl>(&stat.var)) {
+            const std::size_t call_space = (m_stack_slots % 2 == 0) ? 32 : 40;
+            if (contains_string(printnl->expr)) {
+                std::vector<const NodeExpr*> parts;
+                flatten_concat(printnl->expr, parts);
+                for (const NodeExpr* part : parts) {
+                    if (const auto* token = std::get_if<Token>(&part->var);
+                        token && token->type == TokenType::PD_STRING_LITERAL) {
+                        const std::string label = string_label(token->value);
+                        m_output << "    lea rdx, [rel " << label
+                                 << "]\n"
+                                    "    lea rcx, [rel format_string_inline]\n    sub rsp, "
+                                 << call_space << "\n    call printf\n    add rsp, " << call_space
+                                 << '\n';
+                    } else {
+                        gen_expr(*part);
+                        m_output << "    movq rdx, xmm0\n"
+                                    "    lea rcx, [rel format_double_inline]\n    sub rsp, "
+                                 << call_space << "\n    call printf\n    add rsp, " << call_space
+                                 << '\n';
+                    }
+                }
+            } else {
+                gen_expr(printnl->expr);
+                m_output << "    movapd xmm1, xmm0\n    movq rdx, xmm0\n"
+                            "    lea rcx, [rel format_double]\n    sub rsp, "
+                         << call_space << "\n    call printf\n    add rsp, " << call_space << '\n';
+            }
+            m_output << "    lea rdx, [rel newline]\n"
+                        "    lea rcx, [rel format_string]\n    sub rsp, "
+                     << call_space << "\n    call printf\n    add rsp, " << call_space << '\n';
         } else {
             const auto& if_stat = std::get<NodeStatIf>(stat.var);
             const std::size_t label = m_next_label++;
             gen_expr(if_stat.condition);
-            m_output << "    xorpd xmm1, xmm1\n    ucomisd xmm0, xmm1\n    je .if_end_" << label << '\n';
+            m_output << "    xorpd xmm1, xmm1\n    ucomisd xmm0, xmm1\n    je .if_end_" << label
+                     << '\n';
             for (const auto& nested : if_stat.body) gen_stat(nested);
+            if (!if_stat.else_body.empty()) {
+                m_output << "    jmp .if_done_" << label << '\n';
+            }
             m_output << ".if_end_" << label << ":\n";
+            for (const auto& nested : if_stat.else_body) gen_stat(nested);
+            if (!if_stat.else_body.empty()) m_output << ".if_done_" << label << ":\n";
         }
     }
     std::optional<std::string> eval_string(const NodeExpr& expr) const {
