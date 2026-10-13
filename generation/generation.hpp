@@ -25,6 +25,7 @@ class Generator {
         assembly << "default rel\nextern printf\nextern scanf\nglobal main\nsection .data\n"
                     "format_double: db '%g', 0\nformat_string: db '%s', 0\n"
                     "format_input_double: db '%lf', 0\n"
+                    "format_input_string: db ' %255[^', 10, ']', 0\n"
                     "format_double_inline: db '%g', 0\nformat_string_inline: db '%s', 0\n"
                     "newline: db 10, 0\n";
         for (const auto& [label, value] : m_string_constants) {
@@ -62,13 +63,16 @@ class Generator {
             return;
         }
         if (const auto* unary = std::get_if<NodeExprUnary>(&expr.var)) {
-            if (unary->op.type != TokenType::PD_EXCLAIM) {
+            gen_expr(*unary->operand);
+            if (unary->op.type == TokenType::PD_EXCLAIM) {
+                m_output << "    xorpd xmm1, xmm1\n    ucomisd xmm0, xmm1\n"
+                            "    sete al\n    movzx eax, al\n    cvtsi2sd xmm0, eax\n";
+            } else if (unary->op.type == TokenType::PD_MINUS) {
+                m_output << "    xorpd xmm1, xmm1\n    subsd xmm1, xmm0\n    movapd xmm0, xmm1\n";
+            } else if (unary->op.type != TokenType::PD_PLUS) {
                 reportError(m_filename, unary->op, "Unsupported unary operator");
                 std::exit(EXIT_FAILURE);
             }
-            gen_expr(*unary->operand);
-            m_output << "    xorpd xmm1, xmm1\n    ucomisd xmm0, xmm1\n"
-                        "    sete al\n    movzx eax, al\n    cvtsi2sd xmm0, eax\n";
             return;
         }
         if (const auto* increment = std::get_if<NodeExprIncrement>(&expr.var)) {
@@ -142,7 +146,7 @@ class Generator {
             gen_expr(exit->expr);
             m_output << "    cvttsd2si eax, xmm0\n    mov rsp, rbp\n    pop rbp\n    ret\n";
         } else if (const auto* let = std::get_if<NodeStatLet>(&stat.var)) {
-            if (m_vars.contains(let->ident.value)) {
+            if (m_vars.contains(let->ident.value) || m_string_vars.contains(let->ident.value)) {
                 reportError(m_filename, let->ident, "Identifier already used: " + let->ident.value);
                 std::exit(EXIT_FAILURE);
             }
@@ -150,7 +154,37 @@ class Generator {
             m_stack_slots++;
             m_output << "    sub rsp, 8\n    movsd [rbp - " << m_stack_slots * 8 << "], xmm0\n";
             m_vars.emplace(let->ident.value, m_stack_slots * 8);
+        } else if (const auto* string = std::get_if<NodeStatString>(&stat.var)) {
+            if (m_vars.contains(string->ident.value) ||
+                m_string_vars.contains(string->ident.value)) {
+                reportError(m_filename, string->ident,
+                            "Identifier already used: " + string->ident.value);
+                std::exit(EXIT_FAILURE);
+            }
+            const auto value = eval_string(string->expr);
+            if (!value) {
+                reportError(m_filename, string->ident,
+                            "String declarations require a string literal expression");
+                std::exit(EXIT_FAILURE);
+            }
+            const std::string label = string_label(*value);
+            m_stack_slots++;
+            m_output << "    sub rsp, 8\n    lea rax, [rel " << label << "]\n    mov [rbp - "
+                     << m_stack_slots * 8 << "], rax\n";
+            m_string_vars.emplace(string->ident.value, m_stack_slots * 8);
         } else if (const auto* input = std::get_if<NodeStatInput>(&stat.var)) {
+            if (const auto string_it = m_string_vars.find(input->ident.value);
+                string_it != m_string_vars.end()) {
+                m_stack_slots += 32;
+                const std::size_t buffer_offset = m_stack_slots * 8;
+                const std::size_t call_space = (m_stack_slots % 2 == 0) ? 32 : 40;
+                m_output << "    sub rsp, 256\n    lea rax, [rbp - " << buffer_offset
+                         << "]\n    mov [rbp - " << string_it->second
+                         << "], rax\n    mov rdx, rax\n"
+                            "    lea rcx, [rel format_input_string]\n    sub rsp, "
+                         << call_space << "\n    call scanf\n    add rsp, " << call_space << '\n';
+                return;
+            }
             const auto it = m_vars.find(input->ident.value);
             if (it == m_vars.end()) {
                 reportError(m_filename, input->ident,
@@ -174,6 +208,11 @@ class Generator {
                         m_output << "    lea rdx, [rel " << label
                                  << "]\n"
                                     "    lea rcx, [rel format_string_inline]\n    sub rsp, "
+                                 << call_space << "\n    call printf\n    add rsp, " << call_space
+                                 << '\n';
+                    } else if (token && m_string_vars.contains(token->value)) {
+                        m_output << "    mov rdx, [rbp - " << m_string_vars.at(token->value)
+                                 << "]\n    lea rcx, [rel format_string_inline]\n    sub rsp, "
                                  << call_space << "\n    call printf\n    add rsp, " << call_space
                                  << '\n';
                     } else {
@@ -202,6 +241,11 @@ class Generator {
                         m_output << "    lea rdx, [rel " << label
                                  << "]\n"
                                     "    lea rcx, [rel format_string_inline]\n    sub rsp, "
+                                 << call_space << "\n    call printf\n    add rsp, " << call_space
+                                 << '\n';
+                    } else if (token && m_string_vars.contains(token->value)) {
+                        m_output << "    mov rdx, [rbp - " << m_string_vars.at(token->value)
+                                 << "]\n    lea rcx, [rel format_string_inline]\n    sub rsp, "
                                  << call_space << "\n    call printf\n    add rsp, " << call_space
                                  << '\n';
                     } else {
@@ -272,7 +316,8 @@ class Generator {
     }
     bool contains_string(const NodeExpr& expr) const {
         if (const auto* token = std::get_if<Token>(&expr.var)) {
-            return token->type == TokenType::PD_STRING_LITERAL;
+            return token->type == TokenType::PD_STRING_LITERAL ||
+                   m_string_vars.contains(token->value);
         }
         if (const auto* unary = std::get_if<NodeExprUnary>(&expr.var)) {
             return contains_string(*unary->operand);
@@ -306,6 +351,7 @@ class Generator {
     mutable std::size_t m_stack_slots = 0;
     mutable std::size_t m_next_label = 0;
     mutable std::unordered_map<std::string, std::size_t> m_vars;
+    mutable std::unordered_map<std::string, std::size_t> m_string_vars;
     mutable std::unordered_map<std::string, std::string> m_string_labels;
     mutable std::vector<std::pair<std::string, std::string>> m_string_constants;
 };

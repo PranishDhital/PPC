@@ -34,3 +34,8 @@ while (i!= 10)
     print (i);
     i++;
 }
+
+print("\nEnter your name: ");
+string name;
+input(name);
+printnl("Your name is : " + name);
