@@ -56,9 +56,15 @@ struct NodeStatWhile {
     NodeExpr condition;
     std::vector<NodeStat> body;
 };
+struct NodeStatFor {
+    NodeStatLet initializer;
+    NodeExpr condition;
+    NodeExpr increment;
+    std::vector<NodeStat> body;
+};
 struct NodeStat {
     std::variant<NodeStatExit, NodeStatLet, NodeStatIf, NodeStatPrint, NodeStatInput,
-                 NodeStatPrintnl, NodeStatWhile, NodeStatExpr>
+                 NodeStatPrintnl, NodeStatWhile, NodeStatExpr, NodeStatFor>
         var;
 };
 struct NodeProg {
@@ -206,6 +212,44 @@ class Parser {
             NodeStatWhile while_stat{std::move(*condition), {}};
             if (!parse_block(while_stat.body, "while")) return {};
             return NodeStat{std::move(while_stat)};
+        } else if (token && token->type == TokenType::PD_FOR) {
+            consume();
+            if (!consume_if(TokenType::PD_OPEN_PAREN)) {
+                return error("Expected '(' after for");
+            }
+            if (!consume_if(TokenType::PD_LET)) {
+                return error("Expected 'let' declaration in for initializer");
+            }
+            const auto ident = peek();
+            if (!ident || ident->type != TokenType::PD_IDENTIFIER) {
+                return error("Expected identifier in for initializer");
+            }
+            Token name = consume();
+            if (!consume_if(TokenType::PD_EQUALS)) {
+                return error("Expected '=' in for initializer");
+            }
+            auto initial_value = parse_expr();
+            if (!initial_value) return error("Invalid for initializer expression");
+            if (!consume_if(TokenType::PD_SEMI)) {
+                return error("Expected ';' after for initializer");
+            }
+            auto condition = parse_expr();
+            if (!condition) return error("Invalid for loop condition");
+            if (!consume_if(TokenType::PD_SEMI)) {
+                return error("Expected ';' after for loop condition");
+            }
+            auto increment = parse_expr();
+            if (!increment) return error("Invalid for loop increment");
+            if (!consume_if(TokenType::PD_CLOSE_PAREN)) {
+                return error("Expected ')' after for clauses");
+            }
+            if (!consume_if(TokenType::PD_OPEN_BRACE)) {
+                return error("Expected '{' after for clauses");
+            }
+            NodeStatFor for_stat{NodeStatLet{std::move(name), std::move(*initial_value)},
+                                 std::move(*condition), std::move(*increment), {}};
+            if (!parse_block(for_stat.body, "for")) return {};
+            return NodeStat{std::move(for_stat)};
         }
         auto expr = parse_expr();
         if (!expr) return error("Expected a statement");
@@ -243,6 +287,7 @@ class Parser {
             if (!nested) {
                 error(block_name[0] == 'i' ? "Invalid statement in if block"
                        : block_name[0] == 'w' ? "Invalid statement in while block"
+                       : block_name[0] == 'f' ? "Invalid statement in for block"
                                                : "Invalid statement in else block");
                 return false;
             }
@@ -251,6 +296,7 @@ class Parser {
         if (!consume_if(TokenType::PD_CLOSE_BRACE)) {
             error(block_name[0] == 'i' ? "Expected '}' to close if block"
                    : block_name[0] == 'w' ? "Expected '}' to close while block"
+                   : block_name[0] == 'f' ? "Expected '}' to close for block"
                                            : "Expected '}' to close else block");
             return false;
         }

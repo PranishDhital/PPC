@@ -235,15 +235,25 @@ class Generator {
             m_output << ".if_end_" << label << ":\n";
             for (const auto& nested : if_stat->else_body) gen_stat(nested);
             if (!if_stat->else_body.empty()) m_output << ".if_done_" << label << ":\n";
-        } else {
-            const auto& while_stat = std::get<NodeStatWhile>(stat.var);
+        } else if (const auto* while_stat = std::get_if<NodeStatWhile>(&stat.var)) {
             const std::size_t label = m_next_label++;
             m_output << ".while_start_" << label << ":\n";
-            gen_expr(while_stat.condition);
+            gen_expr(while_stat->condition);
             m_output << "    xorpd xmm1, xmm1\n    ucomisd xmm0, xmm1\n    je .while_end_"
                      << label << '\n';
-            for (const auto& nested : while_stat.body) gen_stat(nested);
+            for (const auto& nested : while_stat->body) gen_stat(nested);
             m_output << "    jmp .while_start_" << label << "\n.while_end_" << label << ":\n";
+        } else {
+            const auto& for_stat = std::get<NodeStatFor>(stat.var);
+            gen_stat(NodeStat{for_stat.initializer});
+            const std::size_t label = m_next_label++;
+            m_output << ".for_start_" << label << ":\n";
+            gen_expr(for_stat.condition);
+            m_output << "    xorpd xmm1, xmm1\n    ucomisd xmm0, xmm1\n    je .for_end_"
+                     << label << '\n';
+            for (const auto& nested : for_stat.body) gen_stat(nested);
+            gen_expr(for_stat.increment);
+            m_output << "    jmp .for_start_" << label << "\n.for_end_" << label << ":\n";
         }
     }
     std::optional<std::string> eval_string(const NodeExpr& expr) const {

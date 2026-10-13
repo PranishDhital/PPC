@@ -1,2 +1,30 @@
-let age = 20;
-print ("Hello, You are " + age + " years old.");
+// comment
+/*
+    comment
+*/
+let age = 0;
+print("Enter your age: ");
+input(age);
+
+if (age >= 18) {
+    printnl("Adult");
+} else if (age >= 13) {
+    printnl("Teenager");
+} else {
+    printnl("Child");
+}
+
+
+printnl("While loop");
+let countdown = 2;
+while (countdown > 0) {
+    printnl(countdown);
+    countdown--;
+}
+
+printnl("For Loop");
+for (let i = 1; i <= 3; i++) {
+    printnl(i);
+}
+
+exit(0);

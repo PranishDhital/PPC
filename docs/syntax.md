@@ -28,6 +28,10 @@ if (condition) {
 while (condition) {
     statement;
 }
+
+for (let i = 0; i < 10; i++) {
+    statement;
+}
 ```
 
 - `let` declares a variable. Identifiers start with a letter or `_` and may contain letters, digits, and `_`. A name can only be declared once.
@@ -37,6 +41,7 @@ while (condition) {
 - `exit` ends the program and uses the integer conversion of its numeric expression as the exit code.
 - `++identifier` and `identifier++` increment a declared numeric variable by one. `--identifier` and `identifier--` decrement it by one. Prefix operators evaluate to the updated value; postfix operators evaluate to the previous value.
 - `if` and `while` run their bodies when the condition is nonzero. `else if` checks another condition when earlier conditions are zero, and `else` runs when none of the preceding conditions are nonzero.
+- `for` runs its initializer once, checks its condition before each iteration, then runs its increment expression after each iteration. Its initializer uses a `let` declaration, for example `for (let i = 0; i < 10; i++)`.
 - Conditions support `<`, `<=`, `>`, `>=`, `==`, `!=`, and logical negation with `!`.
 - Statements can be nested inside `if` and `while` blocks.
 

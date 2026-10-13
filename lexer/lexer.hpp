@@ -38,6 +38,7 @@ enum class TokenType {
     PD_EXCLAIM,
     PD_NOT_EQ,
     PD_WHILE,
+    PD_FOR,
     PD_UNDEFINED,
 };
 
@@ -152,6 +153,9 @@ class lexer {
                 break;
             case TokenType::PD_WHILE:
                 name = "WHILE";
+                break;
+            case TokenType::PD_FOR:
+                name = "FOR";
                 break;
             case TokenType::PD_UNDEFINED:
                 break;
@@ -292,6 +296,7 @@ class lexer {
                                    : identifier == "printnl" ? TokenType::PD_PRINT_NL
                                    : identifier == "else"    ? TokenType::PD_ELSE
                                    : identifier == "while"   ? TokenType::PD_WHILE
+                                   : identifier == "for"     ? TokenType::PD_FOR
                                                              : TokenType::PD_IDENTIFIER;
             return {type, identifier, tokenRow, tokenColumn};
         }

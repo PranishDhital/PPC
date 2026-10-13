@@ -65,11 +65,13 @@ int main(int argc, char** argv) {
     }
 
     const Generator generator(*prog, filename);
-    const std::filesystem::path outputDir = std::filesystem::absolute(argv[0]).parent_path();
-    std::filesystem::create_directories(outputDir);
-    const std::filesystem::path assemblyPath = outputDir / "out.asm";
-    const std::filesystem::path objectPath = outputDir / "out.obj";
-    const std::filesystem::path executablePath = outputDir / "out.exe";
+    const std::filesystem::path sourcePath = std::filesystem::absolute(filename);
+    std::filesystem::path assemblyPath = sourcePath;
+    std::filesystem::path objectPath = sourcePath;
+    std::filesystem::path executablePath = sourcePath;
+    assemblyPath.replace_extension(".asm");
+    objectPath.replace_extension(".obj");
+    executablePath.replace_extension(".exe");
     {
         std::ofstream assemblyFile(assemblyPath);
         if (!assemblyFile) {
@@ -86,8 +88,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    std::cout << "Generated " << assemblyPath.string() << '\n';
-
     const std::string assembleCommand =
         "nasm -f win64 \"" + assemblyPath.string() + "\" -o \"" + objectPath.string() + "\"";
     if (std::system(assembleCommand.c_str()) != 0) {
@@ -99,6 +99,17 @@ int main(int argc, char** argv) {
         "gcc \"" + objectPath.string() + "\" -o \"" + executablePath.string() + "\" -mconsole";
     if (std::system(linkCommand.c_str()) != 0) {
         reportError(filename, sourceStart, "GCC failed to link generated output");
+        return 1;
+    }
+
+    std::error_code assemblyCleanupError;
+    std::error_code objectCleanupError;
+    std::filesystem::remove(assemblyPath, assemblyCleanupError);
+    std::filesystem::remove(objectPath, objectCleanupError);
+    if (assemblyCleanupError || objectCleanupError) {
+        const std::string failedPath = assemblyCleanupError ? assemblyPath.string()
+                                                            : objectPath.string();
+        reportError(filename, sourceStart, "could not remove intermediate output: " + failedPath);
         return 1;
     }
 
