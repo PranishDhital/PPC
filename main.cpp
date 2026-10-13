@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
             reportError(filename, token, "unrecognized token '" + token.value + "'");
             return 1;
         }
-        lex.print(token);
+        // lex.print(token);
         tokens.push_back(token);
     } while (token.type != TokenType::PD_END);
 
@@ -107,8 +107,8 @@ int main(int argc, char** argv) {
     std::filesystem::remove(assemblyPath, assemblyCleanupError);
     std::filesystem::remove(objectPath, objectCleanupError);
     if (assemblyCleanupError || objectCleanupError) {
-        const std::string failedPath = assemblyCleanupError ? assemblyPath.string()
-                                                            : objectPath.string();
+        const std::string failedPath =
+            assemblyCleanupError ? assemblyPath.string() : objectPath.string();
         reportError(filename, sourceStart, "could not remove intermediate output: " + failedPath);
         return 1;
     }
