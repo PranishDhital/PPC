@@ -19,6 +19,13 @@ printnl("Age: " + age);
 printnl("Decimal example: " + decimal_value);
 printnl("Negative example: " + temperature);
 
+bool is_adult = age >= threshold;
+if (is_adult) {
+    printnl("Boolean condition: adult");
+} else {
+    printnl("Boolean condition: under 18");
+}
+
 if (name == name) {
     printnl("String equality works");
 }

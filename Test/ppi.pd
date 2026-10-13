@@ -1,0 +1,66 @@
+
+
+// This is a single line comment
+
+/*
+    This is a multi line comment
+*/
+
+// Simple program to display the language
+
+string continue = "yes";
+
+while (continue == "yes")
+{
+    string name;
+    string line = " -------------------------- ";
+    string checkHuman;
+    int age = 0;
+    double weight = 0;
+    bool human = true;
+
+    print("Enter your name : ");
+    input (name);
+    print("\nEnter your age : ");
+    input (age);
+    print("\nEnter your weight : ");
+    input (weight);
+    print("\nAre you a human (yes/no) : ");
+    input (checkHuman);
+
+    printnl (line);
+    printnl ("Name : " + name);
+
+    // for the age
+    if (age < 0 )
+    {
+    printnl ("Age group : Negative age is invalid");
+    }
+    else if (age <= 18)
+    {
+        printnl ("Age group : Child");
+    }
+    else
+    {
+        printnl ("Age group : Adult");
+    }
+
+    // check human
+    if (checkHuman == "yes")
+    {printnl ("Species : Human");}
+    else {printnl ("Species : not human");}
+
+    printnl (line);
+
+    for (int i = 5; i >= 1; --i)
+    {
+        print (i);        // print keeps values on the same line
+    }
+    printnl("");
+    int x= 0;
+    printnl(x);
+    x++;
+    printnl(x);
+    print("\ndo you wanna do it again (yes/no)? :");
+    input ( continue);
+}

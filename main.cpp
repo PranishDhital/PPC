@@ -15,7 +15,7 @@ bool hasPDExtension(const std::string& filename) {
 }
 
 std::string getVersion() {
-    return "ppc : v1.0.0\n"
+    return "ppc : v1.0.1\n"
            "https://github.com/PranishDhital/PPC\n";
 }
 

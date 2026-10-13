@@ -40,6 +40,10 @@ enum class TokenType {
     PD_WHILE,
     PD_FOR,
     PD_STRING,
+    PD_BOOL,
+    PD_BOOL_LITERAL,
+    PD_INT,
+    PD_DOUBLE,
     PD_UNDEFINED,
 };
 
@@ -160,6 +164,18 @@ class lexer {
                 break;
             case TokenType::PD_STRING:
                 name = "STRING";
+                break;
+            case TokenType::PD_BOOL:
+                name = "BOOL";
+                break;
+            case TokenType::PD_BOOL_LITERAL:
+                name = "BOOL_LITERAL";
+                break;
+            case TokenType::PD_INT:
+                name = "INT";
+                break;
+            case TokenType::PD_DOUBLE:
+                name = "DOUBLE";
                 break;
             case TokenType::PD_UNDEFINED:
                 break;
@@ -302,7 +318,12 @@ class lexer {
                                    : identifier == "while"   ? TokenType::PD_WHILE
                                    : identifier == "for"     ? TokenType::PD_FOR
                                    : identifier == "string"  ? TokenType::PD_STRING
-                                                             : TokenType::PD_IDENTIFIER;
+                                   : identifier == "bool"    ? TokenType::PD_BOOL
+                                   : identifier == "true" || identifier == "false"
+                                       ? TokenType::PD_BOOL_LITERAL
+                                   : identifier == "int"    ? TokenType::PD_LET
+                                   : identifier == "double" ? TokenType::PD_LET
+                                                            : TokenType::PD_IDENTIFIER;
             return {type, identifier, tokenRow, tokenColumn};
         }
 

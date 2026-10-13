@@ -39,3 +39,5 @@ print("\nEnter your name: ");
 string name;
 input(name);
 printnl("Your name is : " + name);
+
+bool a = true;

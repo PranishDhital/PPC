@@ -274,6 +274,24 @@ class Parser {
                 return error("Expected ';' after let statement");
             }
             return NodeStat{NodeStatString{std::move(name), std::move(*expr)}};
+        } else if (token && token->type == TokenType::PD_BOOL) {
+            consume();
+            const auto ident = peek();
+            if (!ident || ident->type != TokenType::PD_IDENTIFIER) {
+                return error("Expected identifier after bool");
+            }
+            Token name = consume();
+            std::optional<NodeExpr> expr;
+            if (consume_if(TokenType::PD_EQUALS)) {
+                expr = parse_expr();
+                if (!expr) return error("Invalid bool expression");
+            } else {
+                expr = NodeExpr{Token{TokenType::PD_BOOL_LITERAL, "false", name.row, name.column}};
+            }
+            if (!consume_if(TokenType::PD_SEMI)) {
+                return error("Expected ';' after bool declaration");
+            }
+            return NodeStat{NodeStatLet{std::move(name), std::move(*expr)}};
         }
         auto expr = parse_expr();
         if (!expr) return error("Expected a statement");
@@ -395,6 +413,7 @@ class Parser {
         }
         if (token->type == TokenType::PD_INT_LITERAL ||
             token->type == TokenType::PD_FLOAT_LITERAL ||
+            token->type == TokenType::PD_BOOL_LITERAL ||
             token->type == TokenType::PD_STRING_LITERAL ||
             token->type == TokenType::PD_IDENTIFIER) {
             Token primary = consume();

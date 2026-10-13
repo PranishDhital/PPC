@@ -9,6 +9,7 @@ Comments can be written as `//` through the end of a line or as `/* ... */` acro
 ```pd
 let name = expression;
 string word = expression;
+bool ready = true;
 print(expression);
 printnl(expression);
 input(identifier);
@@ -36,6 +37,7 @@ for (let i = 0; i < 10; i++) {
 ```
 
 - `let` declares a variable. Identifiers start with a letter or `_` and may contain letters, digits, and `_`. A name can only be declared once.
+- `bool` declares a boolean variable initialized with `true` or `false`; omitting the initializer defaults it to `false`. Boolean values can be used directly in `if`, `while`, and `for` conditions or compared with `==` and `!=`.
 - `print` prints a numeric expression or a string without adding a newline. Strings can be joined with `+` and combined with numeric expressions or variables, for example `print("value: " + x);`.
 - `printnl` prints a numeric expression or string, then adds a newline.
 - `input` reads a number into an already declared variable, for example `input(age);`.
@@ -54,7 +56,8 @@ comparison  ::= additive (('<' | '<=' | '>' | '>=' | '==' | '!=') additive)*
 additive    ::= term (('+' | '-') term)*
 term        ::= unary (('*' | '/') unary)*
 unary       ::= '!' unary | ('++' | '--') identifier | primary [('++' | '--')]
-primary     ::= number | identifier | string | '(' expression ')'
+primary     ::= number | boolean | identifier | string | '(' expression ')'
+boolean     ::= 'true' | 'false'
 number      ::= integer | decimal
 integer     ::= digit+
 decimal     ::= digit+ '.' digit*

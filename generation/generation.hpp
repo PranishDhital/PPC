@@ -61,8 +61,11 @@ class Generator {
                 reportError(m_filename, *token, "String values are only supported by print");
                 std::exit(EXIT_FAILURE);
             } else if (token->type == TokenType::PD_INT_LITERAL ||
-                       token->type == TokenType::PD_FLOAT_LITERAL) {
-                const double value = std::stod(token->value);
+                       token->type == TokenType::PD_FLOAT_LITERAL ||
+                       token->type == TokenType::PD_BOOL_LITERAL) {
+                const double value = token->type == TokenType::PD_BOOL_LITERAL
+                                          ? (token->value == "true" ? 1.0 : 0.0)
+                                          : std::stod(token->value);
                 const auto bits = std::bit_cast<std::uint64_t>(value);
                 m_output << "    mov rax, " << bits << "\n    movq xmm0, rax\n";
             } else {
