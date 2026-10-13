@@ -8,6 +8,7 @@ Comments can be written as `//` through the end of a line or as `/* ... */` acro
 
 ```pd
 let name = expression;
+string word = expression;
 print(expression);
 printnl(expression);
 input(identifier);

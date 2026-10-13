@@ -22,7 +22,7 @@ class Generator {
         for (const auto& stat : m_prog.stats) gen_stat(stat);
         m_output << "    xor eax, eax\n    mov rsp, rbp\n    pop rbp\n    ret\n";
         std::stringstream assembly;
-        assembly << "default rel\nextern printf\nextern scanf\nglobal main\nsection .data\n"
+        assembly << "default rel\nextern printf\nextern scanf\nextern strcmp\nglobal main\nsection .data\n"
                     "format_double: db '%g', 0\nformat_string: db '%s', 0\n"
                     "format_input_double: db '%lf', 0\n"
                     "format_input_string: db ' %255[^', 10, ']', 0\n"
@@ -43,6 +43,19 @@ class Generator {
 
    private:
     void gen_expr(const NodeExpr& expr) const {
+        if (const auto* binary = std::get_if<NodeExprBinary>(&expr.var);
+            binary && (binary->op.type == TokenType::PD_DOUBLE_EQ ||
+                       binary->op.type == TokenType::PD_NOT_EQ) &&
+            is_string_value(*binary->lhs) && is_string_value(*binary->rhs)) {
+            gen_string_pointer(*binary->lhs, "rcx");
+            gen_string_pointer(*binary->rhs, "rdx");
+            const std::size_t call_space = (m_stack_slots % 2 == 0) ? 32 : 40;
+            m_output << "    sub rsp, " << call_space << "\n    call strcmp\n    add rsp, "
+                     << call_space << "\n    test eax, eax\n    "
+                     << (binary->op.type == TokenType::PD_DOUBLE_EQ ? "sete" : "setne")
+                     << " al\n    movzx eax, al\n    cvtsi2sd xmm0, eax\n";
+            return;
+        }
         if (const auto* token = std::get_if<Token>(&expr.var)) {
             if (token->type == TokenType::PD_STRING_LITERAL) {
                 reportError(m_filename, *token, "String values are only supported by print");
@@ -313,6 +326,20 @@ class Generator {
         auto rhs = eval_string(*binary.rhs);
         if (!lhs || !rhs) return {};
         return *lhs + *rhs;
+    }
+    bool is_string_value(const NodeExpr& expr) const {
+        const auto* token = std::get_if<Token>(&expr.var);
+        return token && (token->type == TokenType::PD_STRING_LITERAL ||
+                         m_string_vars.contains(token->value));
+    }
+    void gen_string_pointer(const NodeExpr& expr, const char* reg) const {
+        const auto& token = std::get<Token>(expr.var);
+        if (token.type == TokenType::PD_STRING_LITERAL) {
+            m_output << "    lea " << reg << ", [rel " << string_label(token.value) << "]\n";
+        } else {
+            m_output << "    mov " << reg << ", [rbp - " << m_string_vars.at(token.value)
+                     << "]\n";
+        }
     }
     bool contains_string(const NodeExpr& expr) const {
         if (const auto* token = std::get_if<Token>(&expr.var)) {

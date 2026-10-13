@@ -19,6 +19,13 @@ printnl("Age: " + age);
 printnl("Decimal example: " + decimal_value);
 printnl("Negative example: " + temperature);
 
+if (name == name) {
+    printnl("String equality works");
+}
+if (name != "") {
+    printnl("The name is not empty");
+}
+
 // Arithmetic operators: + - * /
 let arithmetic = (age + 2) * 3 / 2 - 1;
 printnl(arithmetic);
